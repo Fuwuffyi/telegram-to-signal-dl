@@ -4,6 +4,7 @@ import shutil
 import logging
 import requests
 from dotenv import load_dotenv
+
 from telegram import Update, Bot
 from telegram.ext import filters, MessageHandler, ApplicationBuilder, ContextTypes, CommandHandler
 
@@ -41,16 +42,19 @@ async def download_stickers(update: Update, context: ContextTypes.DEFAULT_TYPE):
         with open(f"downloads/{set_name}/{index_str}.webp", "wb") as f:
             f.write(sticker_response.content)
     # Save the emojis to a json file
-    with open(f"downloads/{set_name}/emoji.txt", "w", encoding="utf-8") as f:
-        # Write the json file with indentation
-        f.write(json.dumps(emoji_dict, indent=4, ensure_ascii=False))
+    if not os.path.exists(f"downloads/{set_name}/emoji.txt"):
+        with open(f"downloads/{set_name}/emoji.txt", "w", encoding="utf-8") as f:
+            # Write the json file with indentation
+            f.write(json.dumps(emoji_dict, indent=4, ensure_ascii=False))
     # Write the title file
-    with open(f"downloads/{set_name}/title.txt", "w") as f:
-        # Write the json file with indentation
-        f.write(set_name)
+    if not os.path.exists(f"downloads/{set_name}/title.txt"):
+        with open(f"downloads/{set_name}/title.txt", "w") as f:
+            # Write the json file with indentation
+            f.write(set_name)
     # Create a zip archive
-    await context.bot.send_message(chat_id=update.effective_chat.id, text=f"Creating zip file for {set_name}...")
-    archived = shutil.make_archive(f'downloads/{set_name}', 'zip', f'downloads/{set_name}/')
+    if not os.path.exists(f"downloads/{set_name}.zip"):
+        await context.bot.send_message(chat_id=update.effective_chat.id, text=f"Creating zip file for {set_name}...")
+        archived = shutil.make_archive(f'downloads/{set_name}', 'zip', f'downloads/{set_name}/')
     # Send the zip archive to the user
     with open(archived, 'rb') as zip_file:
         await Bot.sendDocument(context.bot, chat_id=update.effective_chat.id, document=zip_file)
