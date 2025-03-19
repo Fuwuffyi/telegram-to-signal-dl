@@ -9,7 +9,7 @@ from telegram import Update, Bot
 from telegram.ext import filters, MessageHandler, ApplicationBuilder, ContextTypes, CommandHandler
 
 logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     level=logging.INFO
 )
 
@@ -21,14 +21,14 @@ async def download_stickers(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await context.bot.send_message(chat_id=update.effective_chat.id, text=f"Gathering info for pack...")
     sticker_set_name = update.message.sticker.set_name
     sticker_set = await Bot.get_sticker_set(context.bot, sticker_set_name)
-    # Get the pack's name and title
+    # Get the pack"s name and title
     set_name = sticker_set.name
     set_title = sticker_set.title
     await context.bot.send_message(chat_id=update.effective_chat.id, text=f"Downloading {set_name} - {set_title}...")
     # Create dir if not exists
     if not os.path.exists(f"downloads/{set_name}/"):
         os.makedirs(f"downloads/{set_name}/")
-    # Loop over the pack's stickers
+    # Loop over the pack"s stickers
     emoji_dict = {}
     for (index, sticker) in enumerate(sticker_set.stickers):
         # Save the emoji related to each sticker
@@ -52,20 +52,24 @@ async def download_stickers(update: Update, context: ContextTypes.DEFAULT_TYPE):
             # Write the json file with indentation
             f.write(set_name)
     # Create a zip archive
+    await context.bot.send_message(chat_id=update.effective_chat.id, text=f"Creating zip file for {set_name}...")
+    archive_loc = f"downloads/{set_name}"
     if not os.path.exists(f"downloads/{set_name}.zip"):
-        await context.bot.send_message(chat_id=update.effective_chat.id, text=f"Creating zip file for {set_name}...")
-        archived = shutil.make_archive(f'downloads/{set_name}', 'zip', f'downloads/{set_name}/')
+        shutil.make_archive(archive_loc, "zip", f"downloads/{set_name}/")
     # Send the zip archive to the user
-    with open(archived, 'rb') as zip_file:
+    with open(f"{archive_loc}.zip", "rb") as zip_file:
         await Bot.sendDocument(context.bot, chat_id=update.effective_chat.id, document=zip_file)
+    # TODO: Upload to signal checklist
+    # TODO: Important! Convert webp animated stickers to apng
+    # TODO: Add reference to this https://signalstickers.org/contribute
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     # Create the bot
     load_dotenv()
-    bot_token = os.getenv('BOT_TOKEN')
+    bot_token = os.getenv("BOT_TOKEN")
     application = ApplicationBuilder().token(bot_token).build()
     # Create the handlers for the commands
-    start_handler = CommandHandler('start', start)
+    start_handler = CommandHandler("start", start)
     download_stickers_handler = MessageHandler(filters.Sticker.ALL & (~filters.COMMAND), download_stickers)
     # Add the commands to the bot
     application.add_handler(start_handler)
