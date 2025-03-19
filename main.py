@@ -26,10 +26,11 @@ async def download_stickers(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not os.path.exists(f"downloads/{set_name}/"):
         os.makedirs(f"downloads/{set_name}/")
     # Loop over the pack's stickers
-    sticker_dict = {}
+    emoji_dict = {}
     for (index, sticker) in enumerate(sticker_set.stickers):
         # Save the emoji related to each sticker
-        sticker_dict[str(index)] = sticker.emoji
+        emoji_dict[str(index)] = sticker.emoji
+        print(sticker.emoji)
         # Save stickers to file if not exists
         if os.path.exists(f"downloads/{set_name}/{index}.webp"):
             continue
@@ -38,9 +39,9 @@ async def download_stickers(update: Update, context: ContextTypes.DEFAULT_TYPE):
         with open(f"downloads/{set_name}/{index}.webp", "wb") as f:
             f.write(sticker_response.content)
     # Save the emojis to a json file
-    with open(f"downloads/{set_name}/emoji.txt", "w") as f:
+    with open(f"downloads/{set_name}/emoji.txt", "w", encoding="utf-8") as f:
         # Write the json file with indentation
-        f.write(json.dumps(sticker_dict, indent=4))
+        f.write(json.dumps(emoji_dict, indent=4, ensure_ascii=False))
     # Write the title file
     with open(f"downloads/{set_name}/title.txt", "w") as f:
         # Write the json file with indentation
