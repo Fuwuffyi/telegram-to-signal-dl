@@ -1,2 +1,8 @@
 # Disable env files
 .env
+
+# Virtual environment
+venv/*
+
+# Sticker downloads
+downloads/*

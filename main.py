@@ -1,8 +1,10 @@
 import os
 import json
 import shutil
+import asyncio
 import logging
-import requests
+import aiohttp
+from pathlib import Path
 from dotenv import load_dotenv
 
 from telegram import Update, Bot
@@ -12,67 +14,97 @@ logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     level=logging.INFO
 )
+logger = logging.getLogger(__name__)
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await context.bot.send_message(chat_id=update.effective_chat.id, text="Connection set up. Send a sticker to download the pack it.")
+# Constants
+DOWNLOADS_DIR = Path("downloads")
+STICKER_FILE_SUFFIX_LENGTH = 3
+
+async def start(update: Update, _: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("Connection established. Send me a sticker to download its pack!")
+
+async def download_sticker(session: aiohttp.ClientSession, url: str, path: Path) -> None:
+    try:
+        async with session.get(url) as response:
+            if response.status == 200:
+                content = await response.read()
+                path.write_bytes(content)
+                logger.info(f"Downloaded sticker: {path.name}")
+            else:
+                logger.error(f"Failed to download {url} - Status: {response.status}")
+    except Exception as e:
+        logger.error(f"Error downloading {url}: {str(e)}")
+
+def save_pack_metadata(pack_dir: Path, emoji_mapping: dict, pack_title: str) -> None:
+    emoji_file = pack_dir / "emoji.json"
+    if not emoji_file.exists():
+        emoji_file.write_text(json.dumps(emoji_mapping, indent=4, ensure_ascii=False), encoding="utf-8")
+    title_file = pack_dir / "title.txt"
+    if not title_file.exists():
+        title_file.write_text(pack_title, encoding="utf-8")
 
 async def download_stickers(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # Get the pack from the sticker
-    await context.bot.send_message(chat_id=update.effective_chat.id, text=f"Gathering info for pack...")
-    sticker_set_name = update.message.sticker.set_name
-    sticker_set = await Bot.get_sticker_set(context.bot, sticker_set_name)
-    # Get the pack"s name and title
-    set_name = sticker_set.name
-    set_title = sticker_set.title
-    await context.bot.send_message(chat_id=update.effective_chat.id, text=f"Downloading {set_name} - {set_title}...")
-    # Create dir if not exists
-    if not os.path.exists(f"downloads/{set_name}/"):
-        os.makedirs(f"downloads/{set_name}/")
-    # Loop over the pack"s stickers
-    emoji_dict = {}
-    for (index, sticker) in enumerate(sticker_set.stickers):
-        # Save the emoji related to each sticker
-        index_str = f"{index:03d}"
-        emoji_dict[index_str] = sticker.emoji
-        # Save stickers to file if not exists
-        if os.path.exists(f"downloads/{set_name}/{index_str}.webp"):
-            continue
-        sticker_url = (await Bot.get_file(context.bot, sticker)).file_path
-        sticker_response = requests.get(sticker_url)
-        with open(f"downloads/{set_name}/{index_str}.webp", "wb") as f:
-            f.write(sticker_response.content)
-    # Save the emojis to a json file
-    if not os.path.exists(f"downloads/{set_name}/emoji.txt"):
-        with open(f"downloads/{set_name}/emoji.txt", "w", encoding="utf-8") as f:
-            # Write the json file with indentation
-            f.write(json.dumps(emoji_dict, indent=4, ensure_ascii=False))
-    # Write the title file
-    if not os.path.exists(f"downloads/{set_name}/title.txt"):
-        with open(f"downloads/{set_name}/title.txt", "w") as f:
-            # Write the json file with indentation
-            f.write(set_name)
-    # Create a zip archive
-    await context.bot.send_message(chat_id=update.effective_chat.id, text=f"Creating zip file for {set_name}...")
-    archive_loc = f"downloads/{set_name}"
-    if not os.path.exists(f"downloads/{set_name}.zip"):
-        shutil.make_archive(archive_loc, "zip", f"downloads/{set_name}/")
-    # Send the zip archive to the user
-    with open(f"{archive_loc}.zip", "rb") as zip_file:
-        await Bot.sendDocument(context.bot, chat_id=update.effective_chat.id, document=zip_file)
-    # TODO: Upload to signal checklist
-    # TODO: Important! Convert webp animated stickers to apng
-    # TODO: Add reference to this https://signalstickers.org/contribute
+    try:
+        # Check if the message contains a sticker
+        sticker = update.message.sticker
+        if not sticker.set_name:
+            await update.message.reply_text("This sticker is not part of a pack.")
+            return
+        # Get sticker pack information
+        await update.message.reply_text("🔍 Gathering sticker pack information...")
+        sticker_set = await context.bot.get_sticker_set(sticker.set_name)
+        pack_name = sticker_set.name
+        pack_title = sticker_set.title
+        # Create download directory
+        pack_dir = DOWNLOADS_DIR / pack_name
+        pack_dir.mkdir(parents=True, exist_ok=True)
+        # Prepare sticker downloads
+        await update.message.reply_text(f"⬇️ Downloading {pack_title} ({pack_name})...")
+        emoji_mapping = {}
+        download_tasks = []
+        # Download stickers and save metadata
+        for idx, sticker in enumerate(sticker_set.stickers):
+            file_suffix = f"{idx:0{STICKER_FILE_SUFFIX_LENGTH}d}"
+            emoji_mapping[file_suffix] = sticker.emoji
+            sticker_path = pack_dir / f"{file_suffix}.webp"
+            # Skip if the sticker already exists
+            if not sticker_path.exists():
+                try:
+                    sticker_file = await context.bot.get_file(sticker.file_id)
+                    download_tasks.append((sticker_file.file_path, sticker_path))
+                except Exception as e:
+                    logger.error(f"Error processing sticker {idx}: {str(e)}")
+        # Download stickers concurrently
+        if download_tasks:
+            async with aiohttp.ClientSession() as session:
+                tasks = [
+                    download_sticker(session, url, path)
+                    for url, path in download_tasks
+                ]
+                await asyncio.gather(*tasks)
+        # Save metadata
+        save_pack_metadata(pack_dir, emoji_mapping, pack_title)
+        # Create the zip archive
+        await update.message.reply_text("🗜 Creating compressed archive...")
+        archive_path = pack_dir.with_suffix(".zip")
+        shutil.make_archive(str(pack_dir), "zip", str(pack_dir))
+        # Send the archive
+        await update.message.reply_document(
+            document=open(archive_path, "rb"),
+            caption=f"📦 {pack_title} Sticker Pack"
+        )
+        logger.info(f"Sent archive for pack: {pack_name}")
+    except Exception as e:
+        logger.error(f"Error processing sticker pack: {str(e)}")
+        await update.message.reply_text("❌ An error occurred while processing the sticker pack.")
 
 if __name__ == "__main__":
     # Create the bot
     load_dotenv()
     bot_token = os.getenv("BOT_TOKEN")
     application = ApplicationBuilder().token(bot_token).build()
-    # Create the handlers for the commands
-    start_handler = CommandHandler("start", start)
-    download_stickers_handler = MessageHandler(filters.Sticker.ALL & (~filters.COMMAND), download_stickers)
-    # Add the commands to the bot
-    application.add_handler(start_handler)
-    application.add_handler(download_stickers_handler)
+    # Register handlers
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(MessageHandler(filters.Sticker.ALL & ~filters.COMMAND, download_stickers))
     # Run the bot
     application.run_polling()
