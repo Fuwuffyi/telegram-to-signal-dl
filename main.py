@@ -38,9 +38,13 @@ async def download_stickers(update: Update, context: ContextTypes.DEFAULT_TYPE):
         with open(f"downloads/{set_name}/{index}.webp", "wb") as f:
             f.write(sticker_response.content)
     # Save the emojis to a json file
-    with open(f"downloads/{set_name}/emoji.json", "w") as f:
+    with open(f"downloads/{set_name}/emoji.txt", "w") as f:
         # Write the json file with indentation
         f.write(json.dumps(sticker_dict, indent=4))
+    # Write the title file
+    with open(f"downloads/{set_name}/title.txt", "w") as f:
+        # Write the json file with indentation
+        f.write(set_name)
     await context.bot.send_message(chat_id=update.effective_chat.id, text=f"Creating zip file for {set_name}...")
 
 if __name__ == '__main__':
