@@ -19,9 +19,18 @@ logger = logging.getLogger(__name__)
 # Constants
 DOWNLOADS_DIR = Path("downloads")
 STICKER_FILE_SUFFIX_LENGTH = 3
+MESSAGES = {
+    "start": "Connection established. Send me a sticker to download its pack!",
+    "no_pack": "This sticker is not part of a pack.",
+    "gathering_info": "🔍 Gathering sticker pack information...",
+    "downloading": "⬇️ Downloading {pack_title} ({pack_name})...",
+    "creating_archive": "🗜 Creating compressed archive...",
+    "archive_caption": "📦 {pack_title} Sticker Pack",
+    "error": "❌ An error occurred while processing the sticker pack."
+}
 
 async def start(update: Update, _: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Connection established. Send me a sticker to download its pack!")
+    await update.message.reply_text(MESSAGES["start"])
 
 async def download_sticker(session: aiohttp.ClientSession, url: str, path: Path) -> None:
     try:
@@ -48,10 +57,10 @@ async def download_stickers(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Check if the message contains a sticker
         sticker = update.message.sticker
         if not sticker.set_name:
-            await update.message.reply_text("This sticker is not part of a pack.")
+            await update.message.reply_text(MESSAGES["no_pack"])
             return
         # Get sticker pack information
-        await update.message.reply_text("🔍 Gathering sticker pack information...")
+        await update.message.reply_text(MESSAGES["gathering_info"])
         sticker_set = await context.bot.get_sticker_set(sticker.set_name)
         pack_name = sticker_set.name
         pack_title = sticker_set.title
@@ -59,7 +68,7 @@ async def download_stickers(update: Update, context: ContextTypes.DEFAULT_TYPE):
         pack_dir = DOWNLOADS_DIR / pack_name
         pack_dir.mkdir(parents=True, exist_ok=True)
         # Prepare sticker downloads
-        await update.message.reply_text(f"⬇️ Downloading {pack_title} ({pack_name})...")
+        await update.message.reply_text(MESSAGES["downloading"].format(pack_title=pack_title, pack_name=pack_name))
         emoji_mapping = {}
         download_tasks = []
         # Download stickers and save metadata
@@ -85,18 +94,18 @@ async def download_stickers(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Save metadata
         save_pack_metadata(pack_dir, emoji_mapping, pack_title)
         # Create the zip archive
-        await update.message.reply_text("🗜 Creating compressed archive...")
+        await update.message.reply_text(MESSAGES["creating_archive"])
         archive_path = pack_dir.with_suffix(".zip")
         shutil.make_archive(str(pack_dir), "zip", str(pack_dir))
         # Send the archive
         await update.message.reply_document(
             document=open(archive_path, "rb"),
-            caption=f"📦 {pack_title} Sticker Pack"
+            caption=MESSAGES["archive_caption"].format(pack_title=pack_title)
         )
         logger.info(f"Sent archive for pack: {pack_name}")
     except Exception as e:
         logger.error(f"Error processing sticker pack: {str(e)}")
-        await update.message.reply_text("❌ An error occurred while processing the sticker pack.")
+        await update.message.reply_text(MESSAGES["error"])
 
 if __name__ == "__main__":
     # Create the bot
