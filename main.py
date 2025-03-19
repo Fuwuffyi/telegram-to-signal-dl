@@ -3,6 +3,7 @@ import json
 import shutil
 import logging
 import requests
+from dotenv import load_dotenv
 from telegram import Update, Bot
 from telegram.ext import filters, MessageHandler, ApplicationBuilder, ContextTypes, CommandHandler
 
@@ -56,7 +57,9 @@ async def download_stickers(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 if __name__ == '__main__':
     # Create the bot
-    application = ApplicationBuilder().token('6724118582:AAFkRb9DLmQDhyBJxGl4_FiAkdkJC2LRTHc').build()
+    load_dotenv()
+    bot_token = os.getenv('BOT_TOKEN')
+    application = ApplicationBuilder().token(bot_token).build()
     # Create the handlers for the commands
     start_handler = CommandHandler('start', start)
     download_stickers_handler = MessageHandler(filters.Sticker.ALL & (~filters.COMMAND), download_stickers)
