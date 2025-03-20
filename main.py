@@ -26,11 +26,9 @@ DOWNLOADS_DIR: Path = Path("downloads")
 THUMBNAIL_NAME: str = "thumbnail.webp"
 SIGNAL_CACHE: str = "signal_cache.json"
 MESSAGES: dict[str, str] = {
-    "start": "Connection established. Send me a sticker to download its pack! Use /help for instructions.",
+    "start": "Send me a sticker to download its pack! Use /help for instructions.",
     "no_pack": "This sticker is not part of a pack.",
-    "gathering_info": "🔍 Gathering sticker pack information...",
     "downloading": "⬇️ Downloading {pack_title} ({pack_name})...",
-    "creating_archive": "🗜 Creating compressed archive...",
     "archive_caption": "📦 {pack_title} Sticker Pack",
     "signal_processing": "⬆️ Uploading the pack to signal...",
     "signal_upload": "🚀 Sticker pack uploaded to Signal: {signal_url}",
@@ -181,7 +179,6 @@ async def process_sticker_pack(update: Update, context: ContextTypes.DEFAULT_TYP
         await update.message.reply_text(MESSAGES["no_pack"])
         raise ValueError("Sticker not part of a pack")
     # Get sticker pack information
-    await update.message.reply_text(MESSAGES["gathering_info"])
     sticker_set = await context.bot.get_sticker_set(sticker.set_name)
     return sticker_set, sticker_set.name, sticker_set.title
 
@@ -195,7 +192,6 @@ async def handle_sticker_pack(update: Update, context: ContextTypes.DEFAULT_TYPE
         await update.message.reply_text(MESSAGES["downloading"].format(pack_title=pack_title, pack_name=pack_name))
         await download_pack_assets(context, sticker_set, pack_dir)
         # Create archive
-        await update.message.reply_text(MESSAGES["creating_archive"])
         loop = asyncio.get_running_loop()
         archive_path = await loop.run_in_executor(None, shutil.make_archive, str(pack_dir), "zip", str(pack_dir))
         # Send to user
