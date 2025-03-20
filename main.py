@@ -192,9 +192,9 @@ async def download_stickers(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         logger.info(f"Sent archive for pack: {pack_name}")
         # Upload pack to signal if user set up signal and upload mode
         user_id = update.effective_user.id
-        upload_enabled = user_modes.get(user_id, True)
         signal_uuid = os.getenv("SIGNAL_UUID")
         signal_password = os.getenv("SIGNAL_PASSWORD")
+        upload_enabled = user_modes.get(user_id, False)
         if signal_uuid and signal_password and upload_enabled:
             # Check cache for link
             signal_url: str | None = None
@@ -227,14 +227,16 @@ async def download_stickers(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 if __name__ == "__main__":
     # Create the bot
     load_dotenv()
-    bot_token = os.getenv("BOT_TOKEN")
-    application = ApplicationBuilder().token(bot_token).build()
+    application = ApplicationBuilder().token(os.getenv("BOT_TOKEN")).build()
     # Register handlers
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("help", help_cmd))
-    application.add_handler(MessageHandler(filters.Sticker.ALL & ~filters.COMMAND, download_stickers))
-    # Mode switching handlers
-    application.add_handler(CommandHandler("mode", mode_command))
-    application.add_handler(CallbackQueryHandler(toggle_upload_callback, pattern="^toggle_upload$"))
+    handlers = [
+        CommandHandler("start", start),
+        CommandHandler("help", help_cmd),
+        CommandHandler("mode", mode_command),
+        MessageHandler(filters.Sticker.ALL & ~filters.COMMAND, download_stickers),
+        CallbackQueryHandler(toggle_upload_callback, pattern="^toggle_upload$")
+    ]
+    for handler in handlers:
+        application.add_handler(handler)
     # Run the bot
     application.run_polling()
