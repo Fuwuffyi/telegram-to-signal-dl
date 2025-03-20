@@ -10,6 +10,9 @@ from dotenv import load_dotenv
 from telegram import Update, Bot
 from telegram.ext import filters, MessageHandler, ApplicationBuilder, ContextTypes, CommandHandler
 
+from signalstickers_client import StickersClient
+from signalstickers_client.models import LocalStickerPack, Sticker
+
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     level=logging.INFO
@@ -19,6 +22,7 @@ logger = logging.getLogger(__name__)
 # Constants
 DOWNLOADS_DIR: Path = Path("downloads")
 STICKER_FILE_SUFFIX_LENGTH: int = 3
+THUMBNAIL_NAME: str = "thumbnail.webp"
 MESSAGES: dict[str, str] = {
     "start": "Connection established. Send me a sticker to download its pack!",
     "no_pack": "This sticker is not part of a pack.",
@@ -26,11 +30,48 @@ MESSAGES: dict[str, str] = {
     "downloading": "⬇️ Downloading {pack_title} ({pack_name})...",
     "creating_archive": "🗜 Creating compressed archive...",
     "archive_caption": "📦 {pack_title} Sticker Pack",
+    "signal_upload": "🚀 Sticker pack uploaded to Signal: {signal_url}\n⬆️ Consider adding the sticker pack at https://signalstickers.org/contribute if not already present",
     "error": "❌ An error occurred while processing the sticker pack."
 }
 
 async def start(update: Update, _: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(MESSAGES["start"])
+
+async def upload_to_signal(signal_uuid: str, signal_passowrd: str, pack_dir: str) -> str:
+    # Load pack metadata
+    metadata_file: Path = pack_dir / "metadata.json"
+    metadata: dict = json.loads(metadata_file.read_text(encoding="utf-8"))
+    # Create a sticker pack
+    pack = LocalStickerPack()
+    pack.title = metadata["title"]
+    pack.author = "Dummy" # TODO: Fixme somehow
+    # Add the stickers to it
+    for (file_suffix, emoji) in metadata["emojis"].items():
+        sticker: Sticker = Sticker()
+        sticker.id = pack.nb_stickers
+        sticker.emoji = emoji
+        sticker_path = pack_dir / f"{file_suffix}.webp"
+        with open(sticker_path, "rb") as f_in:
+            sticker.image_data = f_in.read()
+        pack._addsticker(sticker)
+    # Create the sticker cover
+    cover: Sticker = Sticker()
+    cover.id = pack.nb_stickers
+    # Write the image data to the cover
+    thumbnail_path: Path = pack_dir / THUMBNAIL_NAME
+    if (thumbnail_path).exists():
+        with open(thumbnail_path, "rb") as f_in:
+            cover.image_data = f_in.read()
+    else:
+        # Default to first sticker if no thumbnail
+        cover.image_data = pack.stickers[0].image_data[:]
+    pack.cover = cover
+    # Upload the pack to Signal using the client provided
+    async with StickersClient(signal_uuid, signal_passowrd) as client:
+        pack_id, pack_key = await client.upload_pack(pack)
+    pack_url: str = f"https://signal.art/addstickers/#pack_id={pack_id}&pack_key={pack_key}"
+    logger.info(f"Uploaded pack to signal: {pack_url}")
+    return pack_url
 
 async def download_sticker(session: aiohttp.ClientSession, url: str, path: Path) -> None:
     try:
@@ -61,6 +102,11 @@ async def download_and_zip_stickers(update: Update, context: ContextTypes.DEFAUL
         sticker_path: Path = pack_dir / f"{file_suffix}.webp"
         if not sticker_path.exists():
             needed_stickers.append((pack_sticker.file_id, sticker_path))
+    # Add the thumbnail
+    thumbnail_path: Path = pack_dir / THUMBNAIL_NAME
+    if not (thumbnail_path).exists():
+        if sticker_set.thumbnail.file_id:
+            needed_stickers.append((sticker_set.thumbnail.file_id, thumbnail_path))
     # Get file URLs concurrently
     if needed_stickers:
         file_ids: list[int] = [fid for fid, _ in needed_stickers]
@@ -108,6 +154,12 @@ async def download_stickers(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         # Send archive to user
         await update.message.reply_document(document=open(archive_path, "rb"),caption=MESSAGES["archive_caption"].format(pack_title=pack_title))
         logger.info(f"Sent archive for pack: {pack_name}")
+        # Upload pack to signal if user set up
+        signal_uuid = os.getenv("SIGNAL_UUID")
+        signal_password = os.getenv("SIGNAL_PASSWORD")
+        if signal_uuid and signal_password:
+            signal_url: str = await upload_to_signal(signal_uuid, signal_password, DOWNLOADS_DIR / pack_name)
+            await update.message.reply_text(MESSAGES["signal_upload"].format(signal_url=signal_url))
     except Exception as e:
         logger.error(f"Error processing sticker pack: {str(e)}")
         await update.message.reply_text(MESSAGES["error"])
