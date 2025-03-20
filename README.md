@@ -1,4 +1,4 @@
-# Telegram sticker downloader
+# Telegram to Signal sticker downloader
 A simple telegram bot written in python to download a sticker set.
 ### Instructions
 - Create a telegram bot using [BotFather](https://t.me/BotFather).
