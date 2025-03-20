@@ -1,3 +1,6 @@
+# Dependencies
 aiohttp>=3.11.14
 python-dotenv>=1.0.1
 python-telegram-bot>=22.0
+# Using a fork of signalstickers-client because the package has set upper limits to dependencies which are incompatible with python-telegram-bot
+git+https://github.com/signalstickers/signalstickers-client.git@ecc0ffd503b9d9e06e24b56611baae18df3d9b4b
