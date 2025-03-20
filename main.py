@@ -7,8 +7,8 @@ import aiohttp
 from pathlib import Path
 from dotenv import load_dotenv
 
-from telegram import Update, Bot
-from telegram.ext import filters, MessageHandler, ApplicationBuilder, ContextTypes, CommandHandler
+from telegram import Update, Bot, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import filters, MessageHandler, ApplicationBuilder, ContextTypes, CommandHandler, CallbackQueryHandler
 
 from signalstickers_client import StickersClient
 from signalstickers_client.models import LocalStickerPack, Sticker
@@ -24,7 +24,7 @@ DOWNLOADS_DIR: Path = Path("downloads")
 STICKER_FILE_SUFFIX_LENGTH: int = 3
 THUMBNAIL_NAME: str = "thumbnail.webp"
 MESSAGES: dict[str, str] = {
-    "start": "Connection established. Send me a sticker to download its pack!",
+    "start": "Connection established. Send me a sticker to download its pack! Use /mode to toggle between download and upload modes.",
     "no_pack": "This sticker is not part of a pack.",
     "gathering_info": "🔍 Gathering sticker pack information...",
     "downloading": "⬇️ Downloading {pack_title} ({pack_name})...",
@@ -37,14 +37,46 @@ MESSAGES: dict[str, str] = {
 async def start(update: Update, _: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(MESSAGES["start"])
 
-async def upload_to_signal(signal_uuid: str, signal_passowrd: str, pack_dir: str) -> str:
+user_modes = {}
+async def mode_command(update: Update, _: ContextTypes.DEFAULT_TYPE):
+    # Get the current mode for the user
+    user_id: int = update.effective_user.id
+    current_mode: bool = user_modes.get(user_id, False)
+    # Send the current mode and a button to toggle it
+    mode_text: str = "Upload to Signal" if current_mode else "Download only"
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton("Toggle Mode", callback_data="toggle_upload")]
+    ])
+    await update.message.reply_text(f"Current mode: {mode_text}", reply_markup=keyboard)
+
+async def toggle_upload_callback(update: Update, _: ContextTypes.DEFAULT_TYPE):
+    # Toggle the upload mode for the user
+    query = update.callback_query
+    await query.answer()
+    user_id = query.from_user.id
+    current_mode = user_modes.get(user_id, False)
+    # Check if the user has Signal credentials, otherwise force download mode
+    signal_uuid = os.getenv("SIGNAL_UUID")
+    signal_password = os.getenv("SIGNAL_PASSWORD")
+    if signal_uuid or signal_password:
+        user_modes[user_id] = not current_mode
+    else:
+        user_modes[user_id] = False
+    # Update the message with the new mode
+    new_mode_text = "Upload to Signal" if user_modes[user_id] else "Download only"
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton("Toggle Mode", callback_data="toggle_upload")]
+    ])
+    await query.edit_message_text(f"Mode changed to: {new_mode_text}", reply_markup=keyboard)
+
+async def upload_to_signal(signal_uuid: str, signal_password: str, pack_dir: str) -> str:
     # Load pack metadata
     metadata_file: Path = pack_dir / "metadata.json"
     metadata: dict = json.loads(metadata_file.read_text(encoding="utf-8"))
     # Create a sticker pack
     pack = LocalStickerPack()
     pack.title = metadata["title"]
-    pack.author = "Dummy" # TODO: Fixme somehow
+    pack.author = "Dummy" # FIXME: somehow
     # Add the stickers to it
     for (file_suffix, emoji) in metadata["emojis"].items():
         sticker: Sticker = Sticker()
@@ -67,7 +99,7 @@ async def upload_to_signal(signal_uuid: str, signal_passowrd: str, pack_dir: str
         cover.image_data = pack.stickers[0].image_data[:]
     pack.cover = cover
     # Upload the pack to Signal using the client provided
-    async with StickersClient(signal_uuid, signal_passowrd) as client:
+    async with StickersClient(signal_uuid, signal_password) as client:
         pack_id, pack_key = await client.upload_pack(pack)
     pack_url: str = f"https://signal.art/addstickers/#pack_id={pack_id}&pack_key={pack_key}"
     logger.info(f"Uploaded pack to signal: {pack_url}")
@@ -154,10 +186,12 @@ async def download_stickers(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         # Send archive to user
         await update.message.reply_document(document=open(archive_path, "rb"),caption=MESSAGES["archive_caption"].format(pack_title=pack_title))
         logger.info(f"Sent archive for pack: {pack_name}")
-        # Upload pack to signal if user set up
+        # Upload pack to signal if user set up signal and upload mode
+        user_id = update.effective_user.id
+        upload_enabled = user_modes.get(user_id, True)
         signal_uuid = os.getenv("SIGNAL_UUID")
         signal_password = os.getenv("SIGNAL_PASSWORD")
-        if signal_uuid and signal_password:
+        if signal_uuid and signal_password and upload_enabled:
             signal_url: str = await upload_to_signal(signal_uuid, signal_password, DOWNLOADS_DIR / pack_name)
             await update.message.reply_text(MESSAGES["signal_upload"].format(signal_url=signal_url))
     except Exception as e:
@@ -172,5 +206,8 @@ if __name__ == "__main__":
     # Register handlers
     application.add_handler(CommandHandler("start", start))
     application.add_handler(MessageHandler(filters.Sticker.ALL & ~filters.COMMAND, download_stickers))
+    # Mode switching handlers
+    application.add_handler(CommandHandler("mode", mode_command))
+    application.add_handler(CallbackQueryHandler(toggle_upload_callback, pattern="^toggle_upload$"))
     # Run the bot
     application.run_polling()
