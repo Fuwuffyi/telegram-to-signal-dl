@@ -13,7 +13,3 @@ To get these credentials you must run the desktop app of signal using the `--ena
 - Open the Developer Tools and switch to Console.
 - Change the JavaScript context from `top` to `Electron Isolated Context`.
 - Type `window.reduxStore.getState().items.uuid_id` and `window.reduxStore.getState().items.password` to get the two credentials needed.
-
-----
-
-I am not associated with [signalstickers.org](https://signalstickers.org).

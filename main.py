@@ -33,7 +33,7 @@ MESSAGES: dict[str, str] = {
     "creating_archive": "🗜 Creating compressed archive...",
     "archive_caption": "📦 {pack_title} Sticker Pack",
     "signal_processing": "⬆️ Uploading the pack to signal...",
-    "signal_upload": "🚀 Sticker pack uploaded to Signal: {signal_url}\n⬆️ Consider adding at https://signalstickers.org/contribute if not present in their collection",
+    "signal_upload": "🚀 Sticker pack uploaded to Signal: {signal_url}",
     "error": "❌ An error occurred while processing the sticker pack.",
     "signal_credentials_missing": "⚠️ Signal upload disabled - missing credentials in environment"
 }
