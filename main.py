@@ -35,14 +35,11 @@ MESSAGES: dict[str, str] = {
     "signal_processing": "⬆️ Uploading the pack to signal...",
     "signal_upload": "🚀 Sticker pack uploaded to Signal: {signal_url}\n⬆️ Consider adding at https://signalstickers.org/contribute if not present in their collection",
     "error": "❌ An error occurred while processing the sticker pack.",
-    "signal_credentials_missing": "⚠️ Signal upload disabled - missing credentials in environment",
-    "author_prompt": "📝 Please enter the author name for this sticker pack:",
-    "author_empty": "⚠️ Author name cannot be empty. Please try again."
+    "signal_credentials_missing": "⚠️ Signal upload disabled - missing credentials in environment"
 }
 
 # Global state
 user_modes: dict[str, bool] = {}
-user_states: dict = {}
 signal_enabled: bool = False
 
 async def start(update: Update, _: ContextTypes.DEFAULT_TYPE) -> None:
@@ -104,8 +101,8 @@ async def upload_to_signal(pack_dir: Path) -> str | None:
     metadata = json.loads(metadata_file.read_text(encoding="utf-8"))
     # Create pack
     pack = LocalStickerPack()
-    pack.title = metadata.get("title")
-    pack.author = metadata.get("author", "Telegram Converter Bot")
+    pack.title = metadata.get("title", "Converted pack from Telegram")
+    pack.author = metadata.get("name", "Telegram Converter Bot")
     # Add stickers
     for file_suffix, emoji in metadata.get("emojis").items():
         sticker = Sticker()
@@ -189,7 +186,6 @@ async def process_sticker_pack(update: Update, context: ContextTypes.DEFAULT_TYP
     return sticker_set, sticker_set.name, sticker_set.title
 
 async def handle_sticker_pack(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    print(user_states)
     try:
         # Get pack information
         sticker_set, pack_name, pack_title = await process_sticker_pack(update, context)
@@ -211,13 +207,7 @@ async def handle_sticker_pack(update: Update, context: ContextTypes.DEFAULT_TYPE
             cache = read_signal_cache()
             signal_url = cache.get(pack_name)
             if not signal_url:
-                # Prompt user for author if not present
-                metadata_file = pack_dir / "metadata.json"
-                metadata = json.loads(metadata_file.read_text(encoding="utf-8"))
-                if "author" not in metadata:
-                    await update.message.reply_text(MESSAGES["author_prompt"])
-                    user_states[user_id] = {'state': 'awaiting_author', 'pack_dir': pack_dir}
-                    return # Exit to wait for user input
+                # Process the pack to add to signal
                 await update.message.reply_text(MESSAGES["signal_processing"])
                 signal_url = await upload_to_signal(pack_dir)
                 if signal_url:
@@ -227,39 +217,6 @@ async def handle_sticker_pack(update: Update, context: ContextTypes.DEFAULT_TYPE
                 await update.message.reply_text(MESSAGES["signal_upload"].format(signal_url=signal_url))
     except Exception as e:
         logger.error(f"Processing error: {str(e)}", exc_info=True)
-        await update.message.reply_text(MESSAGES["error"])
-
-
-async def handle_author_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    user_id: id = update.effective_user.id
-    user_state: dict = user_states.get(user_id)
-    if not user_state or user_state.get('state') != 'awaiting_author':
-        return  # Ignore if not awaiting author
-    author: str = update.message.text.strip()
-    if not author:
-        await update.message.reply_text(MESSAGES["author_empty"])
-        return
-    pack_dir: str = user_state['pack_dir']
-    del user_states[user_id]  # Clear state immediately
-    try:
-        # Update metadata with author
-        metadata_file = pack_dir / "metadata.json"
-        metadata = json.loads(metadata_file.read_text(encoding="utf-8"))
-        metadata['author'] = author
-        metadata_file.write_text(json.dumps(metadata, indent=4, ensure_ascii=False), encoding="utf-8")
-        # Proceed with upload
-        await update.message.reply_text(MESSAGES["signal_processing"])
-        signal_url = await upload_to_signal(pack_dir)
-        if signal_url:
-            # Update cache
-            cache = read_signal_cache()
-            cache[pack_dir.name] = signal_url
-            write_signal_cache(cache)
-            await update.message.reply_text(MESSAGES["signal_upload"].format(signal_url=signal_url))
-        else:
-            await update.message.reply_text(MESSAGES["error"])
-    except Exception as e:
-        logger.error(f"Author input handling failed: {e}")
         await update.message.reply_text(MESSAGES["error"])
 
 if __name__ == "__main__":
@@ -272,7 +229,6 @@ if __name__ == "__main__":
         CommandHandler("start", start),
         CommandHandler("help", help_cmd),
         CommandHandler("mode", mode_command),
-        MessageHandler(filters.TEXT & ~filters.COMMAND, handle_author_input),
         MessageHandler(filters.Sticker.ALL, handle_sticker_pack),
         CallbackQueryHandler(toggle_upload_callback, pattern="^toggle_upload$")
     ]
