@@ -184,7 +184,6 @@ async def download_stickers(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         sticker_set, pack_name, pack_title = await process_sticker_pack(update, context)
         if not sticker_set:
             return
-        print(sticker_set)
         # Download stickers
         await update.message.reply_text(MESSAGES["downloading"].format(pack_title=pack_title,pack_name=pack_name))
         archive_path = await download_and_zip_stickers(update, context, sticker_set, pack_name, pack_title)
@@ -199,16 +198,27 @@ async def download_stickers(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         if signal_uuid and signal_password and upload_enabled:
             # Check cache for link
             signal_url: str | None = None
-            with open(SIGNAL_CACHE, "r") as f:
-                current_data: dict = json.loads(f.read())
-                signal_url = current_data[pack_name]
+            if Path(SIGNAL_CACHE).exists():
+                try:
+                    with open(SIGNAL_CACHE, "r") as f:
+                        current_data: dict = json.load(f)
+                        signal_url = current_data.get(pack_name)
+                except json.JSONDecodeError:
+                    print(f"Error: The file {SIGNAL_CACHE} contains invalid JSON.")
+                    signal_url = None
             if signal_url is None:
                 signal_url = await upload_to_signal(signal_uuid, signal_password, DOWNLOADS_DIR / pack_name)
                 # Save the link to the cache
-                with open(SIGNAL_CACHE, "w+") as f:
-                    current_data: dict = json.loads(f.read())
+                try:
+                    with open(SIGNAL_CACHE, "w+") as f:
+                        current_data: dict = json.load(f)
+                        current_data[pack_name] = signal_url
+                        f.write(json.dumps(current_data))
+                except json.JSONDecodeError:
+                    current_data: dict = {}
                     current_data[pack_name] = signal_url
-                    f.write(json.dumps(current_data))
+                    with open(SIGNAL_CACHE, "w+") as f:
+                        f.write(json.dumps(current_data))
             await update.message.reply_text(MESSAGES["signal_upload"].format(signal_url=signal_url))
     except Exception as e:
         logger.error(f"Error processing sticker pack: {str(e)}")

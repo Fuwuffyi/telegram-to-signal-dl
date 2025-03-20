@@ -6,3 +6,4 @@ venv/
 
 # Sticker downloads
 downloads/
+signal_cache.json
