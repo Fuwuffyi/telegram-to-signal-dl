@@ -7,7 +7,7 @@ import aiohttp
 from pathlib import Path
 from dotenv import load_dotenv
 
-from telegram import Update, Bot, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import filters, MessageHandler, ApplicationBuilder, ContextTypes, CommandHandler, CallbackQueryHandler
 
 from signalstickers_client import StickersClient
