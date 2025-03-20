@@ -23,6 +23,7 @@ logger = logging.getLogger(__name__)
 DOWNLOADS_DIR: Path = Path("downloads")
 STICKER_FILE_SUFFIX_LENGTH: int = 3
 THUMBNAIL_NAME: str = "thumbnail.webp"
+SIGNAL_CACHE: str = "signal_cache.json"
 MESSAGES: dict[str, str] = {
     "start": "Connection established. Send me a sticker to download its pack! Use /help to list the functionality of the bot.",
     "no_pack": "This sticker is not part of a pack.",
@@ -72,7 +73,7 @@ async def toggle_upload_callback(update: Update, _: ContextTypes.DEFAULT_TYPE):
     ])
     await query.edit_message_text(f"Mode changed to: {new_mode_text}", reply_markup=keyboard)
 
-async def upload_to_signal(signal_uuid: str, signal_password: str, pack_dir: str) -> str:
+async def upload_to_signal(signal_uuid: str, signal_password: str, pack_dir: Path) -> str:
     # Load pack metadata
     metadata_file: Path = pack_dir / "metadata.json"
     metadata: dict = json.loads(metadata_file.read_text(encoding="utf-8"))
@@ -140,8 +141,8 @@ async def download_and_zip_stickers(update: Update, context: ContextTypes.DEFAUL
     # Add the thumbnail
     thumbnail_path: Path = pack_dir / THUMBNAIL_NAME
     if not (thumbnail_path).exists():
-        if sticker_set.thumbnail.file_id:
-            needed_stickers.append((sticker_set.thumbnail.file_id, thumbnail_path))
+        if sticker_set["thumbnail"]:
+            needed_stickers.append((sticker_set["thumbnail"].file_id, thumbnail_path))
     # Get file URLs concurrently
     if needed_stickers:
         file_ids: list[int] = [fid for fid, _ in needed_stickers]
@@ -183,6 +184,7 @@ async def download_stickers(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         sticker_set, pack_name, pack_title = await process_sticker_pack(update, context)
         if not sticker_set:
             return
+        print(sticker_set)
         # Download stickers
         await update.message.reply_text(MESSAGES["downloading"].format(pack_title=pack_title,pack_name=pack_name))
         archive_path = await download_and_zip_stickers(update, context, sticker_set, pack_name, pack_title)
@@ -195,7 +197,18 @@ async def download_stickers(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         signal_uuid = os.getenv("SIGNAL_UUID")
         signal_password = os.getenv("SIGNAL_PASSWORD")
         if signal_uuid and signal_password and upload_enabled:
-            signal_url: str = await upload_to_signal(signal_uuid, signal_password, DOWNLOADS_DIR / pack_name)
+            # Check cache for link
+            signal_url: str | None = None
+            with open(SIGNAL_CACHE, "r") as f:
+                current_data: dict = json.loads(f.read())
+                signal_url = current_data[pack_name]
+            if signal_url is None:
+                signal_url = await upload_to_signal(signal_uuid, signal_password, DOWNLOADS_DIR / pack_name)
+                # Save the link to the cache
+                with open(SIGNAL_CACHE, "w+") as f:
+                    current_data: dict = json.loads(f.read())
+                    current_data[pack_name] = signal_url
+                    f.write(json.dumps(current_data))
             await update.message.reply_text(MESSAGES["signal_upload"].format(signal_url=signal_url))
     except Exception as e:
         logger.error(f"Error processing sticker pack: {str(e)}")
