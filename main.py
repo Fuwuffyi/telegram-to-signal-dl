@@ -32,7 +32,8 @@ MESSAGES: dict[str, str] = {
     "downloading": "⬇️ Downloading {pack_title} ({pack_name})...",
     "creating_archive": "🗜 Creating compressed archive...",
     "archive_caption": "📦 {pack_title} Sticker Pack",
-    "signal_upload": "🚀 Sticker pack uploaded to Signal: {signal_url}\n⬆️ Consider adding at https://signalstickers.org/contribute if new",
+    "signal_processing": "⬆️ Uploading the pack to signal...",
+    "signal_upload": "🚀 Sticker pack uploaded to Signal: {signal_url}\n⬆️ Consider adding at https://signalstickers.org/contribute if not present in their collection",
     "error": "❌ An error occurred while processing the sticker pack.",
     "signal_credentials_missing": "⚠️ Signal upload disabled - missing credentials in environment"
 }
@@ -201,6 +202,7 @@ async def handle_sticker_pack(update: Update, context: ContextTypes.DEFAULT_TYPE
         with open(archive_path, 'rb') as f:
             await update.message.reply_document(document=f, caption=MESSAGES["archive_caption"].format(pack_title=pack_title))
         # Handle Signal upload
+        await update.message.reply_text(MESSAGES["signal_processing"])
         user_id = update.effective_user.id
         if signal_enabled and user_modes.get(user_id, False):
             cache = read_signal_cache()
