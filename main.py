@@ -24,7 +24,7 @@ DOWNLOADS_DIR: Path = Path("downloads")
 STICKER_FILE_SUFFIX_LENGTH: int = 3
 THUMBNAIL_NAME: str = "thumbnail.webp"
 MESSAGES: dict[str, str] = {
-    "start": "Connection established. Send me a sticker to download its pack! Use /mode to toggle between download and upload modes.",
+    "start": "Connection established. Send me a sticker to download its pack! Use /help to list the functionality of the bot.",
     "no_pack": "This sticker is not part of a pack.",
     "gathering_info": "🔍 Gathering sticker pack information...",
     "downloading": "⬇️ Downloading {pack_title} ({pack_name})...",
@@ -36,6 +36,9 @@ MESSAGES: dict[str, str] = {
 
 async def start(update: Update, _: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(MESSAGES["start"])
+
+async def help_cmd(update: Update, _: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("Here's a list of the bot's functionality:\n\n- /start: Start the bot\n- /help: Show this help message\n- Send a sticker: Download the sticker pack\n- /mode: Toggle between download and upload modes")
 
 user_modes = {}
 async def mode_command(update: Update, _: ContextTypes.DEFAULT_TYPE):
@@ -205,6 +208,7 @@ if __name__ == "__main__":
     application = ApplicationBuilder().token(bot_token).build()
     # Register handlers
     application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("help", help_cmd))
     application.add_handler(MessageHandler(filters.Sticker.ALL & ~filters.COMMAND, download_stickers))
     # Mode switching handlers
     application.add_handler(CommandHandler("mode", mode_command))
