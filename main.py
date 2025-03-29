@@ -149,7 +149,7 @@ async def download_pack_assets(context: ContextTypes.DEFAULT_TYPE, sticker_set, 
     for idx, sticker in enumerate(sticker_set.stickers):
         file_suffix = f"{idx:0{STICKER_FILE_SUFFIX_LENGTH}d}"
         emoji_mapping[file_suffix] = sticker.emoji
-        sticker_path = pack_dir / f"{file_suffix}.webp"
+        sticker_path = pack_dir / f"{file_suffix}.{'webm' if sticker.is_video else 'webp'}";
         if not sticker_path.exists():
             needed_stickers.append((sticker.file_id, sticker_path))
     # Collect thumbnail if available
